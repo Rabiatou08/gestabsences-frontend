@@ -1,4 +1,3 @@
-const BASE = '/api';
 
 function getToken() {
   return localStorage.getItem('token');
