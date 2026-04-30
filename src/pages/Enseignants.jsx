@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { GraduationCap, Plus, Pencil, Trash2, Search, X, Save, Printer } from 'lucide-react';
+import { UserCheck, Plus, Pencil, Trash2, Search, X, Save, Mail } from 'lucide-react';
 import { useToast } from '../components/ToastProvider';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { etudiantsAPI, filieresAPI } from '../services/api';
-import { printRecuInscription } from '../utils/printRecu';
+import { enseignantsAPI } from '../services/api';
 
-const EMPTY = { nom: '', prenom: '', sexe: 'M', code_filiere: '', email_parent: '' };
-
+const EMPTY = { nom: '', prenom: '', mail: '', specialite: '', diplome: '', sexe: 'M' };
+const DIPLOMES = ['Licence', 'Master', 'Ingénieur', 'Doctorat', 'HDR'];
 const AVATAR_COLORS = [
   { bg: '#EFF4FF', color: '#2563EB' },
   { bg: '#F5F3FF', color: '#7C3AED' },
@@ -15,47 +14,38 @@ const AVATAR_COLORS = [
   { bg: '#FFF1F2', color: '#E11D48' },
 ];
 
-export default function Etudiants() {
+export default function Enseignants() {
   const toast = useToast();
-  const [data, setData]           = useState([]);
-  const [filieres, setFilieres]   = useState([]);
-  const [form, setForm]           = useState(EMPTY);
-  const [errors, setErrors]       = useState({});
-  const [editId, setEditId]       = useState(null);
-  const [search, setSearch]       = useState('');
-  const [filterFil, setFilterFil] = useState('');
-  const [toDelete, setToDelete]   = useState(null);
-  const [showForm, setShowForm]   = useState(false);
-  const [loading, setLoading]     = useState(true);
+  const [data, setData]         = useState([]);
+  const [form, setForm]         = useState(EMPTY);
+  const [errors, setErrors]     = useState({});
+  const [editId, setEditId]     = useState(null);
+  const [search, setSearch]     = useState('');
+  const [toDelete, setToDelete] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading]   = useState(true);
 
-  useEffect(() => { load(); loadFilieres(); }, []);
+  useEffect(() => { load(); }, []);
 
   async function load() {
     try {
       setLoading(true);
-      setData(await etudiantsAPI.getAll());
+      setData(await enseignantsAPI.getAll());
     } catch { toast('Erreur de chargement', 'danger'); }
     finally { setLoading(false); }
   }
 
-  async function loadFilieres() {
-    try { setFilieres(await filieresAPI.getAll()); }
-    catch {}
-  }
-
-  const filtered = data.filter(e => {
-    const matchSearch = `${e.nom} ${e.prenom}`.toLowerCase().includes(search.toLowerCase());
-    const matchFil    = !filterFil || String(e.code_filiere) === String(filterFil);
-    return matchSearch && matchFil;
-  });
+  const filtered = data.filter(e =>
+    `${e.nom} ${e.prenom}`.toLowerCase().includes(search.toLowerCase()) ||
+    (e.specialite || '').toLowerCase().includes(search.toLowerCase())
+  );
 
   function validate() {
     const e = {};
-    if (!form.nom.trim())    e.nom          = 'Nom obligatoire';
-    if (!form.prenom.trim()) e.prenom       = 'Prénom obligatoire';
-    if (!form.code_filiere)  e.code_filiere = 'Filière obligatoire';
-    if (form.email_parent && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email_parent))
-      e.email_parent = 'Email invalide';
+    if (!form.nom.trim())    e.nom    = 'Nom obligatoire';
+    if (!form.prenom.trim()) e.prenom = 'Prénom obligatoire';
+    if (form.mail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.mail))
+      e.mail = 'Email invalide';
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -65,12 +55,9 @@ export default function Etudiants() {
   }
 
   function openEdit(e) {
-    setForm({
-      nom: e.nom, prenom: e.prenom,
-      sexe: e.sexe, code_filiere: String(e.code_filiere),
-      email_parent: e.email_parent || '',
-    });
-    setErrors({}); setEditId(e.id_etudiant); setShowForm(true);
+    setForm({ nom: e.nom, prenom: e.prenom, mail: e.mail || '',
+      specialite: e.specialite || '', diplome: e.diplome || '', sexe: e.sexe || 'M' });
+    setErrors({}); setEditId(e.id_enseignant); setShowForm(true);
   }
 
   const onChange = e => {
@@ -82,29 +69,22 @@ export default function Etudiants() {
   async function handleSubmit() {
     if (!validate()) return;
     try {
-      const body = { ...form, code_filiere: Number(form.code_filiere) };
       if (editId) {
-        await etudiantsAPI.update(editId, body);
-        toast('Étudiant modifié ✓');
-        setShowForm(false); setForm(EMPTY); setEditId(null);
-        load();
+        await enseignantsAPI.update(editId, form);
+        toast('Enseignant modifié ✓');
       } else {
-        const result = await etudiantsAPI.create(body);
-        toast('Étudiant inscrit ✓');
-        setShowForm(false); setForm(EMPTY); setEditId(null);
-        const all = await etudiantsAPI.getAll();
-        setData(all);
-        // Imprimer le reçu avec les infos du compte
-        const found = all.find(e => e.id_etudiant === result.etudiant.id_etudiant);
-        if (found) printRecuInscription(found, result.compte);
+        await enseignantsAPI.create(form);
+        toast('Enseignant ajouté ✓');
       }
+      setShowForm(false); setForm(EMPTY); setEditId(null);
+      load();
     } catch (err) { toast(err.message, 'danger'); }
   }
 
   async function handleDelete() {
     try {
-      await etudiantsAPI.remove(toDelete);
-      toast('Étudiant supprimé', 'danger');
+      await enseignantsAPI.remove(toDelete);
+      toast('Enseignant supprimé', 'danger');
       setToDelete(null); load();
     } catch (err) { toast(err.message, 'danger'); }
   }
@@ -114,57 +94,58 @@ export default function Etudiants() {
       <div className="page-header">
         <div className="page-header-top">
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <GraduationCap size={20} color="var(--accent)" /> Étudiants
+            <UserCheck size={20} color="var(--accent)" /> Enseignants
           </h1>
-          <span className="page-badge">Saisie</span>
+          <span className="page-badge">Paramétrage</span>
         </div>
       </div>
 
       <div className="page-body">
-        {/* Stats */}
         <div className="stats-row" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
           <div className="stat-card">
-            <div className="stat-label">Total étudiants</div>
+            <div className="stat-label">Total enseignants</div>
             <div className="stat-value">{data.length}</div>
           </div>
           <div className="stat-card">
-            <div className="stat-label">Garçons</div>
-            <div className="stat-value">{data.filter(e => e.sexe === 'M').length}</div>
+            <div className="stat-label">Docteurs / HDR</div>
+            <div className="stat-value">
+              {data.filter(e => e.diplome === 'Doctorat' || e.diplome === 'HDR').length}
+            </div>
           </div>
           <div className="stat-card">
-            <div className="stat-label">Filles</div>
+            <div className="stat-label">Femmes</div>
             <div className="stat-value">{data.filter(e => e.sexe === 'F').length}</div>
           </div>
         </div>
 
-        {/* Formulaire */}
         {showForm && (
           <div className="card">
             <div className="card-title">
               <Save size={15} />
-              {editId ? "Modifier l'étudiant" : 'Inscrire un étudiant'}
+              {editId ? "Modifier l'enseignant" : 'Nouvel enseignant'}
             </div>
             <div className="form-grid">
               <div className="form-group">
                 <label className="form-label">Nom *</label>
-                <input
-                  className={`form-input ${errors.nom ? 'error' : ''}`}
-                  name="nom" value={form.nom} onChange={onChange}
-                  placeholder="Nom de famille"
-                />
+                <input className={`form-input ${errors.nom ? 'error' : ''}`}
+                  name="nom" value={form.nom} onChange={onChange} placeholder="Nom"/>
                 {errors.nom && <span className="form-hint">{errors.nom}</span>}
               </div>
               <div className="form-group">
                 <label className="form-label">Prénom *</label>
-                <input
-                  className={`form-input ${errors.prenom ? 'error' : ''}`}
-                  name="prenom" value={form.prenom} onChange={onChange}
-                  placeholder="Prénom"
-                />
+                <input className={`form-input ${errors.prenom ? 'error' : ''}`}
+                  name="prenom" value={form.prenom} onChange={onChange} placeholder="Prénom"/>
                 {errors.prenom && <span className="form-hint">{errors.prenom}</span>}
               </div>
             </div>
             <div className="form-grid">
+              <div className="form-group">
+                <label className="form-label">Email</label>
+                <input className={`form-input ${errors.mail ? 'error' : ''}`}
+                  name="mail" type="email" value={form.mail} onChange={onChange}
+                  placeholder="email@univ.ci"/>
+                {errors.mail && <span className="form-hint">{errors.mail}</span>}
+              </div>
               <div className="form-group">
                 <label className="form-label">Sexe</label>
                 <select className="form-select" name="sexe" value={form.sexe} onChange={onChange}>
@@ -172,133 +153,72 @@ export default function Etudiants() {
                   <option value="F">Féminin</option>
                 </select>
               </div>
+            </div>
+            <div className="form-grid">
               <div className="form-group">
-                <label className="form-label">Filière *</label>
-                <select
-                  className={`form-select ${errors.code_filiere ? 'error' : ''}`}
-                  name="code_filiere" value={form.code_filiere} onChange={onChange}
-                >
-                  <option value="">— Choisir une filière —</option>
-                  {filieres.map(f => (
-                    <option key={f.code_filiere} value={f.code_filiere}>
-                      {f.libele_filiere}
-                    </option>
-                  ))}
+                <label className="form-label">Spécialité</label>
+                <input className="form-input" name="specialite" value={form.specialite}
+                  onChange={onChange} placeholder="ex: Informatique"/>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Diplôme</label>
+                <select className="form-select" name="diplome" value={form.diplome} onChange={onChange}>
+                  <option value="">— Choisir —</option>
+                  {DIPLOMES.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
-                {errors.code_filiere && <span className="form-hint">{errors.code_filiere}</span>}
               </div>
             </div>
-            <div className="form-grid cols-1">
-              <div className="form-group">
-                <label className="form-label">Email parent/tuteur</label>
-                <input
-                  className={`form-input ${errors.email_parent ? 'error' : ''}`}
-                  name="email_parent" type="email" value={form.email_parent}
-                  onChange={onChange} placeholder="parent@exemple.ci"
-                />
-                {errors.email_parent && <span className="form-hint">{errors.email_parent}</span>}
-                <span style={{ fontSize:11, color:'var(--text-3)', marginTop:3 }}>
-                  Utilisé pour les notifications d'absence
-                </span>
-              </div>
-            </div>
-
-            {!editId && (
-              <div style={{
-                background:'var(--accent-bg)', border:'1px solid var(--accent-bd)',
-                borderRadius:'var(--radius-sm)', padding:'10px 14px',
-                fontSize:12, color:'var(--accent)', marginBottom:14,
-              }}>
-                ℹ️ Un compte de connexion sera créé automatiquement pour l'étudiant.
-                Les identifiants apparaîtront sur le reçu PDF.
-              </div>
-            )}
-
             <div className="btn-row">
               <button className="btn btn-ghost" onClick={() => setShowForm(false)}>
                 <X size={14} /> Annuler
               </button>
               <button className="btn btn-primary" onClick={handleSubmit}>
-                <Save size={14} /> {editId ? 'Mettre à jour' : 'Inscrire et imprimer reçu'}
+                <Save size={14} /> {editId ? 'Mettre à jour' : 'Enregistrer'}
               </button>
             </div>
           </div>
         )}
 
-        {/* Liste */}
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
             <div className="card-title" style={{ marginBottom: 0 }}>
-              <GraduationCap size={15} /> Liste des étudiants
+              <UserCheck size={15} /> Liste des enseignants
             </div>
             {!showForm && (
               <button className="btn btn-primary btn-sm" onClick={openCreate}>
-                <Plus size={14} /> Inscrire
+                <Plus size={14} /> Ajouter
               </button>
             )}
           </div>
-
           <div className="filter-bar">
             <div className="search-input">
               <Search size={14} />
-              <input
-                placeholder="Rechercher par nom ou prénom..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
+              <input placeholder="Rechercher par nom, spécialité..."
+                value={search} onChange={e => setSearch(e.target.value)}/>
             </div>
-            <select
-              className="form-select"
-              style={{ width: 'auto', minWidth: 180 }}
-              value={filterFil}
-              onChange={e => setFilterFil(e.target.value)}
-            >
-              <option value="">Toutes les filières</option>
-              {filieres.map(f => (
-                <option key={f.code_filiere} value={f.code_filiere}>
-                  {f.libele_filiere}
-                </option>
-              ))}
-            </select>
           </div>
-
           <div className="table-wrapper">
             {loading ? (
-              <p style={{ textAlign: 'center', padding: '30px', color: 'var(--text-3)' }}>
-                Chargement...
-              </p>
+              <p style={{ textAlign: 'center', padding: '30px', color: 'var(--text-3)' }}>Chargement...</p>
             ) : (
               <table>
                 <thead>
                   <tr>
-                    <th>#</th>
-                    <th>Étudiant</th>
-                    <th>Sexe</th>
-                    <th>Filière</th>
-                    <th>Email parent</th>
+                    <th>Enseignant</th>
+                    <th>Email</th>
+                    <th>Spécialité</th>
+                    <th>Diplôme</th>
                     <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.length === 0 && (
-                    <tr>
-                      <td colSpan={6}>
-                        <div className="empty-state">
-                          <GraduationCap size={32} />
-                          <p>Aucun étudiant inscrit</p>
-                        </div>
-                      </td>
-                    </tr>
+                    <tr><td colSpan={5}><div className="empty-state"><p>Aucun enseignant</p></div></td></tr>
                   )}
                   {filtered.map((e, i) => {
                     const av = AVATAR_COLORS[i % AVATAR_COLORS.length];
                     return (
-                      <tr key={e.id_etudiant}>
-                        <td>
-                          <span className="td-mono">
-                            ETU-{String(e.id_etudiant).padStart(4, '0')}
-                          </span>
-                        </td>
+                      <tr key={e.id_enseignant}>
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <div style={{
@@ -307,39 +227,34 @@ export default function Etudiants() {
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
                               fontSize: 12, fontWeight: 600, flexShrink: 0,
                             }}>
-                              {(e.prenom[0]||'').toUpperCase()}{(e.nom[0]||'').toUpperCase()}
+                              {(e.prenom[0] || '').toUpperCase()}{(e.nom[0] || '').toUpperCase()}
                             </div>
-                            <div style={{ fontWeight: 600 }}>{e.nom} {e.prenom}</div>
+                            <div>
+                              <div style={{ fontWeight: 600 }}>{e.nom} {e.prenom}</div>
+                              <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
+                                {e.sexe === 'F' ? 'Femme' : 'Homme'}
+                              </div>
+                            </div>
                           </div>
                         </td>
                         <td>
-                          <span className={`badge ${e.sexe === 'F' ? 'badge-warn' : 'badge-info'}`}>
-                            {e.sexe === 'F' ? 'Fille' : 'Garçon'}
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-2)' }}>
+                            <Mail size={12} />
+                            {e.mail || <span style={{ color: 'var(--text-3)' }}>—</span>}
+                          </div>
                         </td>
+                        <td>{e.specialite || <span style={{ color: 'var(--text-3)' }}>—</span>}</td>
                         <td>
-                          <span className="badge badge-success">{e.libele_filiere || '—'}</span>
-                        </td>
-                        <td style={{ fontSize:12, color:'var(--text-3)' }}>
-                          {e.email_parent || <span style={{ color:'var(--text-3)' }}>—</span>}
+                          {e.diplome
+                            ? <span className="badge badge-success">{e.diplome}</span>
+                            : <span style={{ color: 'var(--text-3)' }}>—</span>}
                         </td>
                         <td style={{ textAlign: 'right' }}>
                           <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                            <button
-                              className="btn btn-sm"
-                              style={{
-                                background: 'var(--accent-bg)',
-                                color: 'var(--accent)',
-                                borderColor: 'var(--accent-bd)',
-                              }}
-                              onClick={() => printRecuInscription(e, null)}
-                            >
-                              <Printer size={12} /> Reçu
-                            </button>
                             <button className="btn btn-secondary btn-sm" onClick={() => openEdit(e)}>
                               <Pencil size={12} /> Modifier
                             </button>
-                            <button className="btn btn-danger btn-sm" onClick={() => setToDelete(e.id_etudiant)}>
+                            <button className="btn btn-danger btn-sm" onClick={() => setToDelete(e.id_enseignant)}>
                               <Trash2 size={12} /> Supprimer
                             </button>
                           </div>
@@ -356,8 +271,8 @@ export default function Etudiants() {
 
       {toDelete && (
         <ConfirmDialog
-          title="Supprimer l'étudiant ?"
-          message="L'étudiant et son compte de connexion seront supprimés définitivement."
+          title="Supprimer l'enseignant ?"
+          message="Cet enseignant sera supprimé définitivement."
           onConfirm={handleDelete}
           onCancel={() => setToDelete(null)}
         />
