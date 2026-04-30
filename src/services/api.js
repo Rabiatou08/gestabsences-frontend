@@ -1,6 +1,4 @@
-const BASE = import.meta.env.VITE_API_URL
-  ? `${import.meta.env.VITE_API_URL}/api`
-  : '/api';
+const BASE = 'https://gestabsences-backend.onrender.com/api';
 function getToken() {
   return localStorage.getItem('token');
 }
