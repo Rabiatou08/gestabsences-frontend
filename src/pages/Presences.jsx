@@ -140,6 +140,8 @@ export default function Presences() {
   }
 
   async function handleSendEmail() {
+
+    console.log('Envoi email pour', emailModal, 'destinataire:', emailDest);
     if (!emailDest.trim()) { toast('Email obligatoire', 'danger'); return; }
     setSendingEmail(true);
     try {
